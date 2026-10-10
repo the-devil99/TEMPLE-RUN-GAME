@@ -151,50 +151,6 @@
       transition: opacity 1s;
     }
 
-    /* On-Screen Touch Gamepad with Clean Text Configuration */
-    #touch-gamepad {
-      position: absolute;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
-      left: 0;
-      right: 0;
-      display: flex;
-      justify-content: space-between;
-      padding: 0 20px;
-      pointer-events: none;
-      z-index: 40;
-    }
-
-    .pad-group {
-      display: flex;
-      gap: 15px;
-      pointer-events: auto;
-    }
-
-    .touch-btn {
-      width: 68px;
-      height: 68px;
-      border-radius: 50%;
-      background: rgba(20, 10, 35, 0.85);
-      border: 2px solid rgba(255, 102, 0, 0.7);
-      color: #ff6600;
-      font-size: 16px;
-      font-weight: 900;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
-      transition: transform 0.1s, background 0.1s;
-      touch-action: manipulation;
-    }
-
-    .touch-btn:active {
-      transform: scale(0.9);
-      background: rgba(255, 102, 0, 0.4);
-      color: #fff;
-    }
-
     .overlay-screen {
       position: absolute;
       inset: 0;
@@ -294,18 +250,6 @@
     <div id="controls-hint"></div>
   </div>
 
-  <!-- On-Screen Touch Gamepad with Clean Configuration Labels -->
-  <div id="touch-gamepad">
-    <div class="pad-group">
-      <button class="touch-btn" ontouchstart="moveLeft(); event.preventDefault();" onclick="moveLeft();">L</button>
-      <button class="touch-btn" ontouchstart="moveRight(); event.preventDefault();" onclick="moveRight();">R</button>
-    </div>
-    <div class="pad-group">
-      <button class="touch-btn" ontouchstart="doDuck(); event.preventDefault();" onclick="doDuck();" style="font-size:12px;">SLD</button>
-      <button class="touch-btn" ontouchstart="doJump(); event.preventDefault();" onclick="doJump();" style="font-size:12px;">JMP</button>
-    </div>
-  </div>
-
   <div id="start-screen" class="overlay-screen">
     <h1>Cyberpunk Escape<br>Realistic Warrior & Grizzly</h1>
     <p>Outrun the organic grizzly bear, wield your glowing plasma katana, leap over obstacles, and survive!</p>
@@ -341,12 +285,13 @@
     let powerupState = { shield: 0, magnet: 0, double: 0 };
     let soundEnabled = true;
     let bgmInterval = null;
+    let stepCount = 0;
 
     try { bestScore = parseInt(localStorage.getItem('cyberpunk_realistic_best') || '0', 10); } catch(e){}
 
     const HINT = IS_TOUCH
-      ? '<strong>MOBILE:</strong> Use on-screen buttons (L / R) to move, (JMP) to jump, (SLD) to slide'
-      : '<strong>CONTROLS:</strong> WASD / Spacebar / Touch buttons';
+      ? '<strong>MOBILE:</strong> Swipe Left/Right to move, Swipe Up to jump, Swipe Down to slide'
+      : '<strong>CONTROLS:</strong> WASD / Arrow Keys / Spacebar';
     document.getElementById('controls-hint').innerHTML = HINT;
     document.getElementById('start-hint').innerHTML = HINT;
 
@@ -405,8 +350,12 @@
     let audioCtx = null;
     function ensureAudio() {
       try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
       } catch (e) { }
     }
 
@@ -414,68 +363,102 @@
       soundEnabled = !soundEnabled;
       document.getElementById('sound-toggle').innerText = soundEnabled ? '🔊' : '🔇';
       if (!soundEnabled) {
-        stopBGM();
-      } else if (isPlaying) {
-        startBGM();
+        stopTempleRunBGM();
+      } else {
+        ensureAudio();
+        startTempleRunBGM();
       }
     }
 
-    // Procedural Cyberpunk Background Music Synthesizer Loop
-    function startBGM() {
-      if (!soundEnabled || !audioCtx) return;
-      if (bgmInterval) return;
+    // Authentic Temple Run Style Tribal Drums & Marimba Soundtrack Loop
+    const templeScale = [220.0, 233.08, 261.63, 293.66, 329.63, 349.23, 392.0];
+    const melodyPattern = [0, 2, 4, 5, 4, 2, 1, 0, 2, 4, 6, 5, 4, 2, 0, -1];
 
+    function startTempleRunBGM() {
+      if (!soundEnabled) return;
       ensureAudio();
-      let step = 0;
-      const bassNotes = [110, 110, 130.81, 98, 110, 146.83, 130.81, 98];
+      if (bgmInterval || !audioCtx) return;
 
+      stepCount = 0;
       bgmInterval = setInterval(() => {
-        if (!isPlaying || !soundEnabled || !audioCtx) {
-          stopBGM();
+        if (!soundEnabled || !audioCtx) {
+          stopTempleRunBGM();
           return;
         }
         try {
           const t = audioCtx.currentTime;
-          const o = audioCtx.createOscillator();
-          const g = audioCtx.createGain();
-          o.type = 'sawtooth';
-          o.frequency.setValueAtTime(bassNotes[step % bassNotes.length], t);
+          const s = stepCount % 16;
 
-          const filter = audioCtx.createBiquadFilter();
-          filter.type = 'lowpass';
-          filter.frequency.setValueAtTime(350, t);
-          filter.frequency.exponentialRampToValueAtTime(1400, t + 0.15);
+          // 1. Heavy Tribal Tom / Kick Drum on beats 1, 3, 5, 7
+          if (s === 0 || s === 4 || s === 8 || s === 10 || s === 12) {
+            const kick = audioCtx.createOscillator();
+            const kickGain = audioCtx.createGain();
+            kick.type = 'triangle';
+            kick.frequency.setValueAtTime(s === 0 ? 140 : 95, t);
+            kick.frequency.exponentialRampToValueAtTime(32, t + 0.16);
+            
+            kickGain.gain.setValueAtTime(0.4, t);
+            kickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
 
-          g.gain.setValueAtTime(0.06, t);
-          g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
-
-          o.connect(filter);
-          filter.connect(g);
-          g.connect(audioCtx.destination);
-
-          o.start(t);
-          o.stop(t + 0.28);
-
-          // Accent arpeggio blip every 2 steps
-          if (step % 2 === 0) {
-            const o2 = audioCtx.createOscillator();
-            const g2 = audioCtx.createGain();
-            o2.type = 'square';
-            o2.frequency.setValueAtTime(440 * (step % 4 === 0 ? 1.5 : 1.25), t);
-            g2.gain.setValueAtTime(0.03, t);
-            g2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-            o2.connect(g2);
-            g2.connect(audioCtx.destination);
-            o2.start(t);
-            o2.stop(t + 0.14);
+            kick.connect(kickGain);
+            kickGain.connect(audioCtx.destination);
+            kick.start(t);
+            kick.stop(t + 0.24);
           }
 
-          step++;
+          // 2. Woodblock / Rimshot for running rhythm
+          if (s % 2 !== 0 || s === 2 || s === 6 || s === 14) {
+            const wood = audioCtx.createOscillator();
+            const woodGain = audioCtx.createGain();
+            wood.type = 'square';
+            wood.frequency.setValueAtTime(920 + (s % 4) * 120, t);
+            
+            const bp = audioCtx.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.frequency.setValueAtTime(1400, t);
+
+            woodGain.gain.setValueAtTime(0.14, t);
+            woodGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+
+            wood.connect(bp);
+            bp.connect(woodGain);
+            woodGain.connect(audioCtx.destination);
+            wood.start(t);
+            wood.stop(t + 0.09);
+          }
+
+          // 3. Adventurous Marimba / Suspense Melody
+          const noteIdx = melodyPattern[s];
+          if (noteIdx >= 0) {
+            const freq = templeScale[noteIdx % templeScale.length] * (s > 7 ? 2 : 1);
+            const synth = audioCtx.createOscillator();
+            const synthGain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+
+            synth.type = 'sine';
+            synth.frequency.setValueAtTime(freq, t);
+
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(700, t);
+            filter.frequency.exponentialRampToValueAtTime(2400, t + 0.12);
+
+            synthGain.gain.setValueAtTime(0.2, t);
+            synthGain.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+
+            synth.connect(filter);
+            filter.connect(synthGain);
+            synthGain.connect(audioCtx.destination);
+
+            synth.start(t);
+            synth.stop(t + 0.3);
+          }
+
+          stepCount++;
         } catch (e) {}
-      }, 220);
+      }, 115);
     }
 
-    function stopBGM() {
+    function stopTempleRunBGM() {
       if (bgmInterval) {
         clearInterval(bgmInterval);
         bgmInterval = null;
@@ -925,6 +908,7 @@
 
       canvas.addEventListener('touchstart', e => {
         ensureAudio();
+        startTempleRunBGM();
         const t = e.touches[0];
         sx = t.clientX; sy = t.clientY; fired = false; tracking = true;
       }, { passive: true });
@@ -1193,16 +1177,15 @@
 
     function startGame() {
       ensureAudio();
+      startTempleRunBGM();
       document.getElementById('start-screen').style.display = 'none';
       isPlaying = true;
-      startBGM();
       animate();
       setTimeout(() => { document.getElementById('controls-hint').style.opacity = 0.35; }, 5000);
     }
 
     function gameOver() {
       playCrashSound();
-      stopBGM();
       isPlaying = false;
       camera.position.set(0, baseCam.y, baseCam.z);
       
@@ -1220,6 +1203,7 @@
 
     function resetGame() {
       ensureAudio();
+      startTempleRunBGM();
       chunks.forEach(c => scene.remove(c));
       obstacles.forEach(o => scene.remove(o));
       coins.forEach(c => scene.remove(c));
@@ -1246,7 +1230,6 @@
       for (let i = 0; i < VISIBLE_CHUNKS; i++) createTrackChunk(-i * CHUNK_LENGTH);
       document.getElementById('game-over-screen').style.display = 'none';
       isPlaying = true;
-      startBGM();
       animate();
     }
 
